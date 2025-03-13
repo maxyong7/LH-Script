@@ -1,5 +1,8 @@
 ## Steps to use
 1. Clone this repo
+    ```
+    https://github.com/maxyong7/LH-Script.git
+    ```
 2. Install the requirements (if first time using this script)
     ```
     pip install -r requirements.txt
