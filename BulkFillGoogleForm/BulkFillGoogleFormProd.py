@@ -67,14 +67,11 @@ def main():
     print(f'Excel File Path: {excel_file_path}')
     df = read_excel(excel_file_path)
     with ThreadPoolExecutor(max_workers=5) as executor:  # Adjust max_workers as needed
-        i = 0
         futures = {}
         for _, row in df.iterrows():
-            if i == 0:
-                if row[googleFormStatusColumn] != completedStatus:
-                    future = executor.submit(send_request, row, excel_file_path, df)
-                    futures[future] = row
-                    i+=1
+            if row[googleFormStatusColumn] != completedStatus:
+                future = executor.submit(send_request, row, excel_file_path, df)
+                futures[future] = row
         for future in as_completed(futures):
             future.result()  # Ensures all tasks complete
     
