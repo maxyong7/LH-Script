@@ -1,4 +1,6 @@
+from datetime import datetime
 import os
+import pytz
 import requests
 import pandas as pd
 import threading
@@ -7,21 +9,24 @@ import dotenv
 dotenv.load_dotenv()
 
 url = os.getenv("GOOGLE_DOCS_URL")
-excel_file_path = os.getenv("EXCEL_FILE_PATH")
+excel_file_path = os.getenv("MAIN_EXCEL_FILE_PATH")
 nameOfOperator = os.getenv("NAME_OF_OPERATOR")
 operatorContactNumber = os.getenv("OPERATOR_CONTACT_NUMBER")
 operatorEmailAddress = os.getenv("OPERATOR_EMAIL_ADDRESS")
 completedStatus = os.getenv("COMPLETED_STATUS")
 googleFormStatusColumn = os.getenv("GOOGLE_FORM_STATUS_COLUMN")
+googleFormDateColumn = os.getenv("GOOGLE_FORM_DATE_COLUMN")
 completed_counter = 0
 failed_counter = 0
 
 # Read the Excel file
 def read_excel(file_path):
-    df = pd.read_csv(file_path)
+    df = pd.read_csv(file_path) 
     df.columns = df.columns.str.lower()
     if googleFormStatusColumn not in df.columns:
         df[googleFormStatusColumn] = "Pending"  # Ensure 'google form status' column exists and initialized with "Pending"
+    if googleFormDateColumn not in df.columns:
+        df[googleFormDateColumn] = None  # Ensure 'google form status' column exists and initialized with "Pending"
     return df
 
 # Write to the Excel file with a lock
@@ -59,7 +64,10 @@ def send_request(row, file_path, df):
         else:
             failed_counter += 1
 
+        # Save completed date (example: 27/03/2025)
+        now = datetime.now(pytz.timezone('Asia/Kuala_Lumpur')).strftime("%d/%m/%Y")
         df.loc[row.name, googleFormStatusColumn] = status
+        df.loc[row.name, googleFormDateColumn] = now
         update_excel(file_path, df)
 
 # Main function to read, process, and update Excel file
