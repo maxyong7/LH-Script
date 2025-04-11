@@ -57,6 +57,9 @@ def format_first_name(row):
 
     return f"Op {row['rooms']} {channel_short} {check_in}-{check_out}"
 
+def print_formatted_contacts(row):
+    print(f"{row['First Name']} {row['Middle Name']} {row['Last Name']}")
+
 
 # Create new formatted dataframe
 contacts_formatted = pd.DataFrame({
@@ -80,6 +83,9 @@ contacts_formatted = pd.DataFrame({
     "Phone 1 - Label": "Mobile",
     "Phone 1 - Value": reservations_filtered["guest phone number"].astype(str).apply(lambda x: f"+{x}")
 })
+
+# Print the exported contacts
+contacts_formatted.apply(print_formatted_contacts,axis=1)
 
 # Update rows that were exported as contacts to "completed"
 processed_indices = exclude_completed_status.index
