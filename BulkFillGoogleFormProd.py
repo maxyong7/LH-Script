@@ -38,7 +38,14 @@ def update_excel(file_path, df):
 def send_request(row, file_path, df):
     global completed_counter
     global failed_counter
-    numberOfAdults = min(row["number of adults"],8)
+    if "2+1" in row["room types"].lower():
+        numberOfAdults = min(row["number of adults"],7)
+    elif "3" in row["room types"].lower():
+        numberOfAdults = min(row["number of adults"],9)
+    else:
+        numberOfAdults = min(row["number of adults"],4)
+
+    print(f'Room type: {row["room types"]} \t .Number of Adults: {numberOfAdults}')
     data = f'entry.1478325381={nameOfOperator}&entry.887535986={operatorContactNumber}&entry.1577804325={row["channel name"]}&entry.1080752479={row["guest first name"]+ " " + row["guest last name"]}&entry.1314980540={row["guest phone number"]}&entry.473851324={row["rooms"]}&entry.2006614104={numberOfAdults}&entry.1937352817={row["check in date"]}&entry.929840929={row["check out date"]}&entry.1273587710=None&emailAddress={operatorEmailAddress}'
     encoded_data = data.encode('utf-8')
 
@@ -74,7 +81,7 @@ def send_request(row, file_path, df):
 def main():
     print(f'Excel File Path: {excel_file_path}')
     df = read_excel(excel_file_path)
-    with ThreadPoolExecutor(max_workers=5) as executor:  # Adjust max_workers as needed
+    with ThreadPoolExecutor(max_workers=1) as executor:  # Adjust max_workers as needed
         futures = {}
         for _, row in df.iterrows():
             if row[googleFormStatusColumn] != completedStatus:
