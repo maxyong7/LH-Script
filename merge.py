@@ -34,8 +34,8 @@ importedCSVFilePath = getImportedCSV(newExcelFilePath)
 new_df = pd.read_csv(importedCSVFilePath)
 new_df.columns = new_df.columns.str.lower()
 
-now = datetime.now(pytz.timezone('Asia/Kuala_Lumpur')).replace(tzinfo=None)
-temp_checkin = pd.to_datetime(new_df['check in date'], errors='coerce')
+now = datetime.now(pytz.timezone('Asia/Kuala_Lumpur')).replace(tzinfo=None).date()
+temp_checkin = pd.to_datetime(new_df['check in date'], errors='coerce').dt.date
 new_df = new_df[temp_checkin >= now] # Only include check-in dates matches Malaysia time now
 
 # Combine the two
