@@ -56,6 +56,14 @@ def format_first_name(row):
 
     return f"Op {row['rooms']} {channel_short} {check_in}-{check_out}"
 
+def format_phone_number(phone_number):
+    if pd.isna(phone_number):
+        return "-"
+    phone_number_str = str(phone_number).strip()
+    if phone_number_str == "":
+        return "-"
+    return f"+{phone_number_str}"
+
 def print_formatted_contacts(row):
     print(f"{row['First Name']} {row['Middle Name']} {row['Last Name']}")
 
@@ -84,7 +92,7 @@ contacts_with_phone  = pd.DataFrame({
     "Photo": None,
     "Labels": "* myContacts",
     "Phone 1 - Label": "Mobile",
-    "Phone 1 - Value": with_phone["guest phone number"].astype(str).apply(lambda x: f"+{x}")
+    "Phone 1 - Value": with_phone["guest phone number"].apply(format_phone_number)
 })
 
 # Format contacts missing phone numbers (just for tracking)
@@ -101,22 +109,41 @@ contacts_with_phone.apply(print_formatted_contacts, axis=1)
 print(f"\n=== Contacts MISSING Phone Numbers (total {len(contacts_missing_phone)}) === ===")
 contacts_missing_phone.apply(print_formatted_contacts, axis=1)
 
+processed_contacts = pd.DataFrame({
+    "First Name": reservations_filtered.apply(format_first_name, axis=1),
+    "Middle Name": reservations_filtered["guest first name"],
+    "Last Name": reservations_filtered["guest last name"],
+    "Phonetic First Name": None,
+    "Phonetic Middle Name": None,
+    "Phonetic Last Name": None,
+    "Name Prefix": None,
+    "Name Suffix": None,
+    "Nickname": None,
+    "File As": None,
+    "Organization Name": None,
+    "Organization Title": None,
+    "Organization Department": None,
+    "Birthday": None,
+    "Notes": None,
+    "Photo": None,
+    "Labels": "* myContacts",
+    "Phone 1 - Label": "Mobile",
+    "Phone 1 - Value": reservations_filtered["guest phone number"].apply(format_phone_number)
+})
+
 # Print how many contacts were processed. Including contacts without phone number
-total_processed_indices = exclude_completed_status.index
+total_processed_indices = processed_contacts.index
 print(f"\nNumber of processed rows for contacts: {len(total_processed_indices)}")
 
-# Processed contacts with phone number
-total_processed_indices_with_phone_number = with_phone.index
-
 # Update rows that were exported as contacts to "completed"
-reservations_df.loc[total_processed_indices_with_phone_number, contactExportStatusColumn] = completedStatus
+reservations_df.loc[total_processed_indices, contactExportStatusColumn] = completedStatus
 
-if len(total_processed_indices_with_phone_number) == 0:
+if len(total_processed_indices) == 0:
     sys.exit(0)
 
 # Save completed date (example: 27/03/2025)
 now = datetime.now(pytz.timezone('Asia/Kuala_Lumpur')).strftime("%d/%m/%Y")
-reservations_df.loc[total_processed_indices_with_phone_number, contactExportDateColumn] = now
+reservations_df.loc[total_processed_indices, contactExportDateColumn] = now
 reservations_df.to_csv(reservations_file_path, index=False)
 
 
@@ -127,5 +154,5 @@ logsFolder = f"./logs/{todayDate}"
 timestamp = datetime.now().strftime("%d%m%Y_%H%M%S")
 
 output_file_path = f"{logsFolder}/formatted_contacts_{timestamp}.csv"
-contacts_with_phone.to_csv(output_file_path, index=False)
+processed_contacts.to_csv(output_file_path, index=False)
 
