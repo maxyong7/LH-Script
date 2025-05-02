@@ -45,7 +45,7 @@ def send_request(row, file_path, df):
     else:
         numberOfAdults = min(row["number of adults"],4)
 
-    print(f'Room type: {row["room types"]} \t .Number of Adults: {numberOfAdults}')
+    print(f'\nName:{row["guest first name"]} {row["guest last name"]} \nPhone number:{row["guest phone number"]} \nRoom type: {row["room types"]} \nNumber of Adults: {numberOfAdults}')
     data = f'entry.1478325381={nameOfOperator}&entry.887535986={operatorContactNumber}&entry.1577804325={row["channel name"]}&entry.1080752479={row["guest first name"]+ " " + row["guest last name"]}&entry.1314980540={row["guest phone number"]}&entry.473851324={row["rooms"]}&entry.2006614104={numberOfAdults}&entry.1937352817={row["check in date"]}&entry.929840929={row["check out date"]}&entry.1273587710=None&emailAddress={operatorEmailAddress}'
     encoded_data = data.encode('utf-8')
 
