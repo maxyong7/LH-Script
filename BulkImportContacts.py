@@ -27,6 +27,7 @@ channel_mapping = {
     "Booking.com": "Bk",
     "Agoda": "Ag",
     "Extranet": "Dr",
+    "Mobile App": "Dr",
     "Trip.com(New)": "Tp"
 }
 
