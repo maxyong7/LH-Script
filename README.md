@@ -1,16 +1,16 @@
 ## Steps to use
-.. Clone this repo
+1. Clone this repo
     ```
     git clone https://github.com/maxyong7/LH-Script.git
     ```
-.. Install the requirements (if first time using this script)
+2. Install the requirements (if first time using this script)
     ```
     pip install -r requirements.txt
     ```
-.. Go to Little Hotelier > Front Desk > Reservations > Select "Status = Confirmed" > Select Dates > Click "Export"
-.. Create a new folder within the repo called "import" and import the excel file from Step 3
-.. Create another new folder within the repo called "main" and import another excel file from Google Drive.
-.. Create an `.env` file with these variables
+3. Go to Little Hotelier > Front Desk > Reservations > Select "Status = Confirmed" > Select Dates > Click "Export"
+4. Create a new folder within the repo called `attachment`, and within the `attachment` folder, create a `import` folder and import the excel file from Step 3
+5. Create another new folder within the `attachment` folder called `main` folder and import the excel file from Google Drive. (This is what keep track of what has already been exported or submitted)
+6. Create an `.env` file with these variables
     ```
     GOOGLE_DOCS_URL=
     NAME_OF_OPERATOR=
@@ -24,7 +24,7 @@
     MAIN_EXCEL_FILE_PATH=
     NEW_EXCEL_FILE_PATH=
     ```
-.. Run
+7. Run
     To merge the new excel file into the existing excel file
     ```
     python .\merge.py
@@ -37,7 +37,7 @@
     ```
     python .\BulkFillGoogleFormProd.py
     ```
-.. Import into https://contacts.google.com/
+8. The generated contacts can be found in a new folder call `logs`, import into https://contacts.google.com/
 
 
 ## Sync account in Samsung
