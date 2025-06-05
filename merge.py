@@ -48,7 +48,7 @@ deduped_df = combined_df.drop_duplicates(subset=["booking reference", "guest fir
 deduped_df = deduped_df.sort_values(by=['check in date','guest first name'], ascending=True)
 
 # Save the result back to the old file or a new one
-todayDate = datetime.now().strftime("%d-%m-%Y")
+todayDate = datetime.now().strftime("%Y-%m-%d")
 timestamp = datetime.now().strftime("%H%M%S")
 
 logsFolder = f"./logs/{todayDate}"

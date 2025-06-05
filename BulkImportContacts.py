@@ -149,7 +149,7 @@ reservations_df.to_csv(reservations_file_path, index=False)
 
 
 # Save to a new CSV file
-todayDate = datetime.now().strftime("%d-%m-%Y")
+todayDate = datetime.now().strftime("%Y-%m-%d")
 
 logsFolder = f"./logs/{todayDate}"
 timestamp = datetime.now().strftime("%d%m%Y_%H%M%S")
