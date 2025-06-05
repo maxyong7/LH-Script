@@ -1,23 +1,43 @@
 ## Steps to use
-1. Clone this repo
+.. Clone this repo
     ```
-    https://github.com/maxyong7/LH-Script.git
+    git clone https://github.com/maxyong7/LH-Script.git
     ```
-2. Install the requirements (if first time using this script)
+.. Install the requirements (if first time using this script)
     ```
     pip install -r requirements.txt
     ```
-3. Go to Little Hotelier > Front Desk > Reservations > Select "Status = Confirmed" > Select Dates > Click "Export"
-4. Create a new folder within the repo called "env" and import the excel file from Step 3
-5. Rename `reservations_file_path` variable to the file name in `BulkImportContacts.py`
+.. Go to Little Hotelier > Front Desk > Reservations > Select "Status = Confirmed" > Select Dates > Click "Export"
+.. Create a new folder within the repo called "import" and import the excel file from Step 3
+.. Create another new folder within the repo called "main" and import another excel file from Google Drive.
+.. Create an `.env` file with these variables
     ```
-    reservations_file_path = "./env/reservations(4).csv"
+    GOOGLE_DOCS_URL=
+    NAME_OF_OPERATOR=
+    OPERATOR_CONTACT_NUMBER=
+    OPERATOR_EMAIL_ADDRESS=
+    COMPLETED_STATUS=
+    GOOGLE_FORM_STATUS_COLUMN=
+    GOOGLE_FORM_DATE_COLUMN=
+    CONTACT_EXPORT_STATUS_COLUMN=
+    CONTACT_EXPORT_DATE_COLUMN=
+    MAIN_EXCEL_FILE_PATH=
+    NEW_EXCEL_FILE_PATH=
     ```
-6. Run 
+.. Run
+    To merge the new excel file into the existing excel file
+    ```
+    python .\merge.py
+    ```
+    To generate an excel file of contacts to be imported into "google contacts"
     ```
     python .\BulkImportContacts.py
     ```
-7. Import into https://contacts.google.com/
+    To submit google form
+    ```
+    python .\BulkFillGoogleFormProd.py
+    ```
+.. Import into https://contacts.google.com/
 
 
 ## Sync account in Samsung
