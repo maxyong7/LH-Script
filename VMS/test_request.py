@@ -62,33 +62,13 @@ with requests.Session() as s:
     parser = InputFinder()
     parser.feed(r.text)
 
-    # Try hidden input first
+    # Refresh CSRF token after login
     csrf_field, csrf_value = None, None
     if parser.found:
         csrf_field, csrf_value = next(iter(parser.found.items()))
         print("Found CSRF token in login page:", csrf_field, csrf_value)
-
-    xsrf_cookie = (
-        s.cookies.get("XSRF-TOKEN")
-    )
-    headers = {}
-    if xsrf_cookie:
-        headers["X-CSRF-TOKEN"] = csrf_value
-        headers["X-XSRF-TOKEN"] = csrf_value
-
-    try:
-        resp = s.get(GET_VISITOR, timeout=10)
-        print("Status:", resp.status_code)
-        print("Response headers:", resp.headers)
-        respData = resp.json()
-        # print("Body:", respData)
-    except requests.RequestException as e:
-        print("Request failed:", e)
         
-    opusvms_session = s.cookies.get("opusvms_session")
-
-
-    # Form fields (non-file fields)
+    ## Create Visitor
     data = {
         "full_name": "test pname",
         "phone": "test number",
@@ -101,9 +81,21 @@ with requests.Session() as s:
     data[csrf_field] = csrf_value
     createResp = {}
     try:
-        createResp = s.post(CREATE_VISITOR, headers=headers,data=data, timeout=30)
+        createResp = s.post(CREATE_VISITOR, data=data, timeout=30)
         print("Status:", createResp.status_code)
         print("Response headers:", createResp.headers)
         print("Body:", createResp)
     except requests.RequestException as e:
         print("Request failed:", e)
+
+    ## Get Visitor List
+    try:
+        resp = s.get(GET_VISITOR, timeout=10)
+        print("Status:", resp.status_code)
+        print("Response headers:", resp.headers)
+        respData = resp.json()
+        # print("Body:", respData)
+    except requests.RequestException as e:
+        print("Request failed:", e)
+        
+    # opusvms_session = s.cookies.get("opusvms_session")
