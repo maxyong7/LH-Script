@@ -7,6 +7,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from html.parser import HTMLParser
 import dotenv
+import json
 dotenv.load_dotenv()
 
 url = os.getenv("GOOGLE_DOCS_URL")
@@ -20,6 +21,9 @@ googleFormStatusColumn = os.getenv("GOOGLE_FORM_STATUS_COLUMN")
 googleFormDateColumn = os.getenv("GOOGLE_FORM_DATE_COLUMN")
 completed_counter = 0
 failed_counter = 0
+parkingMapPath = os.getenv("PARKING_MAP_PATH")
+with open(parkingMapPath, "r", encoding="utf-8") as f:
+    parkingMap = json.load(f)
 
 ## VMS URLs
 VMS_BASE_URL = os.getenv("VMS_BASE_URL")
@@ -72,16 +76,19 @@ def send_request(row, file_path, df, session, csrf_field, csrf_value):
     else:
         numberOfAdults = min(row["number of adults"],4)
 
-    print(f'\nName:{row["guest first name"]} {row["guest last name"]} \nPhone number:{row["guest phone number"]} \nRoom type: {row["room types"]} \nNumber of Adults: {numberOfAdults}')
-
+    
     visitorEmailAddress = ""
     if pd.notna(row["guest email"]):
         visitorEmailAddress = row["guest email"]
-    else:
+    if visitorEmailAddress == "":
         visitorEmailAddress = "test@gmail.com"
 
     fullName = f'{row["guest first name"]} {row["guest last name"]}'
    
+    carParkLot = parkingMap[f'{row["rooms"]}']
+    if carParkLot == "":
+        carParkLot = "-"
+
     ## Create Visitor
     data = {
         "full_name": f'{fullName}',
@@ -93,12 +100,11 @@ def send_request(row, file_path, df, session, csrf_field, csrf_value):
         "booking_source": f'{row["channel name"]}',
     }
     data[csrf_field] = csrf_value
-    createResp = {}
     try:
         createResp = session.post(CREATE_VISITOR, data=data, timeout=30)
-        print("Status:", createResp.status_code)
-        print("Response headers:", createResp.headers)
-        print("Body:", createResp)
+        # print("Status:", createResp.status_code)
+        # print("Response headers:", createResp.headers)
+        # print("Body:", createResp)
     except requests.RequestException as e:
         print("Request failed:", e)
 
@@ -130,10 +136,10 @@ def send_request(row, file_path, df, session, csrf_field, csrf_value):
 
     try:
         resp = session.get(GET_VISITOR, params=params, timeout=10)
-        print("Status:", resp.status_code)
-        print("Response headers:", resp.headers)
         jsonResp = resp.json()
-        print("Body:", jsonResp)
+        # print("Status:", resp.status_code)
+        # print("Response headers:", resp.headers)
+        # print("Body:", jsonResp)
         chosen_visitor_id = jsonResp["data"][0]["id"]
     except requests.RequestException as e:
         print("Request failed:", e)
@@ -144,12 +150,12 @@ def send_request(row, file_path, df, session, csrf_field, csrf_value):
     session.headers["X-Requested-With"] = "XMLHttpRequest"
     try:
         resp2 = session.get(f"{SHOW_VISITOR_INFO}/{chosen_visitor_id}/show", timeout=10)
-        print("Status:", resp2.status_code)
-        print("Response headers:", resp2.headers)
         respData = resp2.json()
-        print("Body:", respData)
+        # print("Status:", resp2.status_code)
+        # print("Response headers:", resp2.headers)
+        # print("Body:", respData)
         qrcode_url = respData["qrcode_url"]
-        print("QR Code URL:", qrcode_url)
+        # print("QR Code URL:", qrcode_url)
         status = completedStatus
     except requests.RequestException as e:
         print("Request failed:", e)
@@ -157,6 +163,8 @@ def send_request(row, file_path, df, session, csrf_field, csrf_value):
     if status != completedStatus:
         status = "Something went wrong"
     
+    print(f'\nName:{row["guest first name"]} {row["guest last name"]} \nPhone number:{row["guest phone number"]} \nRoom type: {row["room types"]} \nNumber of Adults: {numberOfAdults}\nQR Code URL:{qrcode_url}\nStatus: {status}')
+
     # Update the dataframe with the status
     with lock:
         if status == completedStatus:
