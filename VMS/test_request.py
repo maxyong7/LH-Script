@@ -28,6 +28,7 @@ operator_password = os.getenv("OPERATOR_PASSWORD")
 LOGIN_API = f"{BASE_URL}/login"
 CREATE_VISITOR = f"{BASE_URL}/admin/visitors"
 GET_VISITOR = f"{BASE_URL}/admin/get-visitors"
+SHOW_VISITOR_INFO = f"{BASE_URL}/admin/visitors"
 
 creds = {"email": f"{operator_email}", "password": f"{operator_password}"}
 
@@ -63,11 +64,13 @@ with requests.Session() as s:
     parser.feed(r.text)
 
     # Refresh CSRF token after login
-    csrf_field, csrf_value = None, None
+    csrf_field, csrf_value= None, None
     if parser.found:
-        csrf_field, csrf_value = next(iter(parser.found.items()))
-        print("Found CSRF token in login page:", csrf_field, csrf_value)
-        
+        field, value = next(iter(parser.found.items()))
+        if field == "_token":
+            csrf_field, csrf_value = field, value
+            print("Found CSRF token in login page:", csrf_field, csrf_value)
+
     ## Create Visitor
     data = {
         "full_name": "test pname",
@@ -89,13 +92,56 @@ with requests.Session() as s:
         print("Request failed:", e)
 
     ## Get Visitor List
+
+    # columns spec from your console, condensed:
+    cols = [
+        {"data": "reg_no",  "name": "reg_no",      "searchable": "true",  "orderable": "true"},
+        {"data": "name",    "name": "name",        "searchable": "true",  "orderable": "true"},
+        {"data": "phone",   "name": "phone",       "searchable": "true",  "orderable": "true"},
+        {"data": "checkin", "name": "checkin_at",  "searchable": "true",  "orderable": "true"},
+        {"data": "checkout","name": "checkout_at", "searchable": "true",  "orderable": "true"},
+        {"data": "status",  "name": "status",      "searchable": "true",  "orderable": "true"},
+        {"data": "action",  "name": "action",      "searchable": "false", "orderable": "false"},
+    ]
+
+    params = {
+        "start": 0,
+        "length": 10,
+        "order[0][column]": 0,
+        "order[0][dir]": "desc",
+        "order[0][name]": "reg_no",
+        "search[value]": "pname",   # <- your search term
+        "search[regex]": "false",
+    }
+    for i, c in enumerate(cols):
+        for k, v in c.items():
+            params[f"columns[{i}][{k}]"] = v
+
     try:
-        resp = s.get(GET_VISITOR, timeout=10)
+        resp = s.get(GET_VISITOR, params=params, timeout=10)
         print("Status:", resp.status_code)
         print("Response headers:", resp.headers)
-        respData = resp.json()
-        # print("Body:", respData)
+        jsonResp = resp.json()
+        print("Body:", jsonResp)
+        chosen_visitor_id = jsonResp["data"][0]["id"]
     except requests.RequestException as e:
         print("Request failed:", e)
+
+
+    
+    ## Get Specific Visitor Info
+    s.headers["X-Requested-With"] = "XMLHttpRequest"
+    try:
+        resp2 = s.get(f"{SHOW_VISITOR_INFO}/{chosen_visitor_id}/show", timeout=10)
+        print("Status:", resp2.status_code)
+        print("Response headers:", resp2.headers)
+        respData = resp2.json()
+        print("Body:", respData)
+        qrcode_url = respData["qrcode_url"]
+        print("QR Code URL:", qrcode_url)
+    except requests.RequestException as e:
+        print("Request failed:", e)
+
+    
         
     # opusvms_session = s.cookies.get("opusvms_session")
