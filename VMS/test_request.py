@@ -1,6 +1,8 @@
 import requests
 import os
 from html.parser import HTMLParser
+import dotenv
+dotenv.load_dotenv()
 
 
 # Minimal HTML parser that finds hidden input fields by name
@@ -21,16 +23,16 @@ class InputFinder(HTMLParser):
             if val:
                 self.found[name] = val
 
-BASE_URL = os.getenv("BASE_URL")
+VMS_BASE_URL = os.getenv("VMS_BASE_URL")
 operator_email = os.getenv("OPERATOR_EMAIL_ADDRESS")
-operator_password = os.getenv("OPERATOR_PASSWORD")
+operator_vms_password = os.getenv("OPERATOR_VMS_PASSWORD")
 
-LOGIN_API = f"{BASE_URL}/login"
-CREATE_VISITOR = f"{BASE_URL}/admin/visitors"
-GET_VISITOR = f"{BASE_URL}/admin/get-visitors"
-SHOW_VISITOR_INFO = f"{BASE_URL}/admin/visitors"
+LOGIN_API = f"{VMS_BASE_URL}/login"
+CREATE_VISITOR = f"{VMS_BASE_URL}/admin/visitors"
+GET_VISITOR = f"{VMS_BASE_URL}/admin/get-visitors"
+SHOW_VISITOR_INFO = f"{VMS_BASE_URL}/admin/visitors"
 
-creds = {"email": f"{operator_email}", "password": f"{operator_password}"}
+creds = {"email": f"{operator_email}", "password": f"{operator_vms_password}"}
 
 
 with requests.Session() as s:
@@ -141,7 +143,3 @@ with requests.Session() as s:
         print("QR Code URL:", qrcode_url)
     except requests.RequestException as e:
         print("Request failed:", e)
-
-    
-        
-    # opusvms_session = s.cookies.get("opusvms_session")
