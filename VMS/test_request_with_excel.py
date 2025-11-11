@@ -8,6 +8,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from html.parser import HTMLParser
 import dotenv
 import json
+import gspread
+from google.oauth2.service_account import Credentials
 dotenv.load_dotenv()
 
 url = os.getenv("GOOGLE_DOCS_URL")
@@ -58,6 +60,11 @@ def read_excel(file_path):
         df[googleFormStatusColumn] = "Pending"  # Ensure 'google form status' column exists and initialized with "Pending"
     if googleFormDateColumn not in df.columns:
         df[googleFormDateColumn] = None  # Ensure 'google form status' column exists and initialized with "Pending"
+    
+    # Explicitly set the data types to object to handle mixed types (None and strings)
+    df[googleFormStatusColumn] = df[googleFormStatusColumn].astype('object')
+    df[googleFormDateColumn] = df[googleFormDateColumn].astype('object')
+    
     return df
 
 # Write to the Excel file with a lock
@@ -66,7 +73,7 @@ def update_excel(file_path, df):
     df.to_csv(file_path, index=False)
 
 # Function to send POST request
-def send_request(row, file_path, df, session, csrf_field, csrf_value):
+def send_request(row, file_path, df, session, csrf_field, csrf_value, worksheet):
     global completed_counter
     global failed_counter
     if "2+1" in row["room types"].lower():
@@ -96,7 +103,7 @@ def send_request(row, file_path, df, session, csrf_field, csrf_value):
         "email": f'{visitorEmailAddress}',
         "national_identification_no": "-",
         "unit_no": f'{row["rooms"]}',
-        "car_park_lot": "p1",
+        "car_park_lot": f'{carParkLot}',
         "booking_source": f'{row["channel name"]}',
     }
     data[csrf_field] = csrf_value
@@ -178,61 +185,167 @@ def send_request(row, file_path, df, session, csrf_field, csrf_value):
         df.loc[row.name, googleFormDateColumn] = now
         update_excel(file_path, df)
 
+        # Write a header row (A1:H1) in one call
+        worksheet.update(range_name="A1:H1", values=[["Full Name", "Phone Number", "Room Number", "Channel Name", "Check In Date", "Check Out Date", "QR Code URL", "Created At"]])
+
+        # Append a row to google sheet
+        worksheet.append_row(
+            [
+                f'{fullName}', 
+                f'{row["guest phone number"]}',
+                f'{row["rooms"]}',
+                f'{row["channel name"]}',
+                f'{row["check in date"]}',
+                f'{row["check out date"]}',
+                f'{qrcode_url}',
+                f'{now}',
+            ],
+            value_input_option="RAW")
+
+def cleanup_old_google_sheet_rows(worksheet):
+    """
+    Delete rows from the worksheet where 'Created At' column is more than 7 days old
+    """
+    try:
+        print("\nStarting cleanup of old rows in Google Sheet...")
+        # Get all records from the worksheet
+        all_records = worksheet.get_all_records()
+        
+        if not all_records:
+            print("\nNo records found in worksheet to clean up")
+            return
+        
+        # Get current date in KL timezone
+        current_date = datetime.now(pytz.timezone('Asia/Kuala_Lumpur'))
+        rows_to_delete = []
+        
+        # Check each row (starting from row 2, since row 1 is header)
+        for i, record in enumerate(all_records, start=2):
+            created_at_str = record.get('Created At', '')
+            
+            if created_at_str:
+                try:
+                    # Parse the date (assuming format is DD/MM/YYYY)
+                    created_at = datetime.strptime(created_at_str, "%d/%m/%Y")
+                    created_at = pytz.timezone('Asia/Kuala_Lumpur').localize(created_at)
+                    
+                    # Calculate the difference
+                    days_diff = (current_date - created_at).days
+                    
+                    # If more than 7 days old, mark for deletion
+                    if days_diff > 7:
+                        rows_to_delete.append(i)
+                        print(f"\nMarking row {i} for deletion - Created: {created_at_str}, Days old: {days_diff} \n{record}")
+                        
+                except ValueError as e:
+                    print(f"Error parsing date '{created_at_str}' in row {i}: {e}")
+        
+        # Delete rows in reverse order to maintain correct row indices
+        for row_num in reversed(rows_to_delete):
+            try:
+                worksheet.delete_rows(row_num)
+                print(f"Deleted row number {row_num}")
+            except Exception as e:
+                print(f"Error deleting row {row_num}: {e}")
+        
+        if rows_to_delete:
+            print(f"Successfully deleted {len(rows_to_delete)} old rows")
+        else:
+            print("No old rows found to delete")
+            
+    except Exception as e:
+        print(f"Error during cleanup: {e}")
+
+def login_google_and_get_worksheet():
+    print("\nLogging into Google Sheets...")
+    
+    # Scopes: spreadsheets read/write
+    SCOPE = ["https://www.googleapis.com/auth/spreadsheets"]
+
+    creds_path = os.environ["GOOGLE_APPLICATION_CREDENTIALS"]
+    spreadsheet_id = os.environ["SHEET_ID"]
+
+    creds = Credentials.from_service_account_file(creds_path, scopes=SCOPE)
+    client = gspread.authorize(creds)
+
+    # Open the spreadsheet and select the first worksheet
+    sh = client.open_by_key(spreadsheet_id)
+    ws = sh.sheet1  # or sh.worksheet("Sheet1")
+
+    return ws
+
+def login_vms_and_get_token(session):
+    print("\nLogging into Opus VMS to get tokens...")
+    creds = {"email": f"{operatorEmailAddress}", "password": f"{operatorVmsPassword}"}
+    # 1) Authenticate
+    r = session.get(LOGIN_API)
+    r.raise_for_status()
+    
+    parser = InputFinder()
+    parser.feed(r.text)
+
+    # Try hidden input first
+    csrf_field, csrf_value = None, None
+    if parser.found:
+        csrf_field, csrf_value = next(iter(parser.found.items()))
+        creds[csrf_field] = csrf_value
+        # print("Found CSRF token in login page:", csrf_field, csrf_value)
+
+    # If the server sets auth cookies (e.g., Set-Cookie: session=...; HttpOnly),
+    # requests.Session will store them automatically in s.cookies.
+    # Some APIs also return a CSRF token in headers/body; add it if needed:
+    r = session.post(LOGIN_API, json=creds, timeout=15)
+    r.raise_for_status()
+
+    
+    parser = InputFinder()
+    parser.feed(r.text)
+
+    # Refresh CSRF token after login
+    csrf_field, csrf_value= None, None
+    if parser.found:
+        field, value = next(iter(parser.found.items()))
+        if field == "_token":
+            csrf_field, csrf_value = field, value
+            # print("Found CSRF token after logged in:", csrf_field, csrf_value)
+    return csrf_field, csrf_value
+
+
 # Main function to read, process, and update Excel file
 def main():
-    creds = {"email": f"{operatorEmailAddress}", "password": f"{operatorVmsPassword}"}
     with requests.Session() as s:
-        s.headers.update({
-            "User-Agent": "Mozilla/5.0 (requests)",
-            "Accept": "application/json",
-        })
-
-        # 1) Authenticate
-        r = s.get(LOGIN_API)
-        r.raise_for_status()
-        
-        parser = InputFinder()
-        parser.feed(r.text)
-
-        # Try hidden input first
-        csrf_field, csrf_value = None, None
-        if parser.found:
-            csrf_field, csrf_value = next(iter(parser.found.items()))
-            creds[csrf_field] = csrf_value
-            print("Found CSRF token in login page:", csrf_field, csrf_value)
-
-        # If the server sets auth cookies (e.g., Set-Cookie: session=...; HttpOnly),
-        # requests.Session will store them automatically in s.cookies.
-        # Some APIs also return a CSRF token in headers/body; add it if needed:
-        r = s.post(LOGIN_API, json=creds, timeout=15)
-        r.raise_for_status()
-
-        
-        parser = InputFinder()
-        parser.feed(r.text)
-
-        # Refresh CSRF token after login
-        csrf_field, csrf_value= None, None
-        if parser.found:
-            field, value = next(iter(parser.found.items()))
-            if field == "_token":
-                csrf_field, csrf_value = field, value
-                print("Found CSRF token in login page:", csrf_field, csrf_value)
-
         print(f'Excel File Path: {excel_file_path}')
         df = read_excel(excel_file_path)
-        with ThreadPoolExecutor(max_workers=1) as executor:  # Adjust max_workers as needed
+        if df is None:
+            print("Failed to read Excel file. Exiting.")
+            return
+
+        csrf_field, csrf_value = login_vms_and_get_token(session=s)
+        if not csrf_field or not csrf_value:
+            print("Failed to retrieve CSRF token from VMS. Exiting.")
+            return
+        
+        ws = login_google_and_get_worksheet()
+        if not ws:
+            print("Failed to access Google Sheet worksheet. Exiting.")
+            return
+
+        with ThreadPoolExecutor(max_workers=5) as executor:  # Adjust max_workers as needed
             futures = {}
             for _, row in df.iterrows():
                 if row[googleFormStatusColumn] != completedStatus:
-                    future = executor.submit(send_request, row, excel_file_path, df, 
-                                             session=s ,csrf_field=csrf_field, csrf_value=csrf_value)
+                    future = executor.submit(send_request, row, excel_file_path, df, worksheet=ws,
+                                             session=s, csrf_field=csrf_field, csrf_value=csrf_value)
                     futures[future] = row
             for future in as_completed(futures):
                 future.result()  # Ensures all tasks complete
         
-        print(f'Completed: {completed_counter} \nFailed: {failed_counter}')
+        print(f'\nCompleted: {completed_counter} \nFailed: {failed_counter}')
+        
+        # Clean up google sheet rows older than 7 days
+        cleanup_old_google_sheet_rows(ws)
         return
+
 
 if __name__ == "__main__":
     main()
