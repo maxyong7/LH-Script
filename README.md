@@ -23,6 +23,11 @@
     CONTACT_EXPORT_DATE_COLUMN=
     MAIN_EXCEL_FILE_PATH=
     NEW_EXCEL_FILE_PATH=
+    OPERATOR_VMS_PASSWORD=
+    VMS_BASE_URL=
+    PARKING_MAP_PATH=
+    GOOGLE_APPLICATION_CREDENTIALS=
+    SHEET_ID=
     ```
 7. Run
     To merge the new excel file into the existing excel file
@@ -32,6 +37,10 @@
     To generate an excel file of contacts to be imported into "google contacts"
     ```
     python .\BulkImportContacts.py
+    ```
+    To submit Opus VMS form
+    ```
+    python .\BulkFillOpusVMS.py
     ```
     To submit google form
     ```
