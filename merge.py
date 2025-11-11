@@ -5,6 +5,8 @@ import sys
 import pandas as pd
 import pytz
 import shutil
+import dotenv
+dotenv.load_dotenv()
 
 
 def getImportedCSV(newExcelFilePath:str) -> str:
