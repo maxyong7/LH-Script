@@ -1,0 +1,1 @@
+## THIS FOLDER IS FOR TESTING USE. PLEASE USE `BulkFillOpusVMS.py` in the main folder instead
