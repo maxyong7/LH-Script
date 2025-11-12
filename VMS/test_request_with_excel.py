@@ -221,24 +221,24 @@ def cleanup_old_google_sheet_rows(worksheet):
         
         # Check each row (starting from row 2, since row 1 is header)
         for i, record in enumerate(all_records, start=2):
-            created_at_str = record.get('Created At', '')
+            checkout_date_str = record.get('Check Out Date', '')
             
-            if created_at_str:
+            if checkout_date_str:
                 try:
                     # Parse the date (assuming format is DD/MM/YYYY)
-                    created_at = datetime.strptime(created_at_str, "%d/%m/%Y")
+                    created_at = datetime.strptime(checkout_date_str, "%d/%m/%Y")
                     created_at = pytz.timezone('Asia/Kuala_Lumpur').localize(created_at)
                     
                     # Calculate the difference
                     days_diff = (current_date - created_at).days
                     
                     # If more than 7 days old, mark for deletion
-                    if days_diff > 7:
+                    if days_diff > 1:
                         rows_to_delete.append(i)
-                        print(f"\nMarking row {i} for deletion - Created: {created_at_str}, Days old: {days_diff} \n{record}")
+                        print(f"\nMarking row {i} for deletion - Created: {checkout_date_str}, Days old: {days_diff} \n{record}")
                         
                 except ValueError as e:
-                    print(f"Error parsing date '{created_at_str}' in row {i}: {e}")
+                    print(f"Error parsing date '{checkout_date_str}' in row {i}: {e}")
         
         # Delete rows in reverse order to maintain correct row indices
         for row_num in reversed(rows_to_delete):
