@@ -2,8 +2,9 @@ import os
 import sys
 import pandas as pd
 from datetime import datetime, time
-
+import dotenv
 import pytz
+dotenv.load_dotenv()
 
 completedStatus = os.getenv("COMPLETED_STATUS")
 contactExportStatusColumn = os.getenv("CONTACT_EXPORT_STATUS_COLUMN")

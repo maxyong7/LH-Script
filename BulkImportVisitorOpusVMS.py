@@ -4,12 +4,9 @@ import pytz
 import requests
 import pandas as pd
 import threading
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from html.parser import HTMLParser
 import dotenv
 import json
-import gspread
-from google.oauth2.service_account import Credentials
 import io
 dotenv.load_dotenv()
 
