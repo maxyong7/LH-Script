@@ -63,6 +63,9 @@ def read_excel(file_path):
     df[googleFormStatusColumn] = df[googleFormStatusColumn].astype('object')
     df[googleFormDateColumn] = df[googleFormDateColumn].astype('object')
     
+    # Filter out rows that are already completed
+    df = df[df[googleFormStatusColumn] != completedStatus]
+    
     return df
 
 # Transform dataframe to VMS format with required fields
@@ -81,11 +84,10 @@ def transform_dataframe(df, parkingMap):
     
     for idx, row in df.iterrows():
         # Get visitor email
-        visitorEmailAddress = ""
         if pd.notna(row["guest email"]):
             visitorEmailAddress = row["guest email"]
-        if visitorEmailAddress == "":
-            visitorEmailAddress = "test@gmail.com"
+        else:
+            visitorEmailAddress = operatorEmailAddress
         
         # Get car park lot from parking map
         carParkLot = parkingMap.get(str(row["rooms"]), "")
@@ -94,9 +96,9 @@ def transform_dataframe(df, parkingMap):
 
         # Determine number of adults based on room types
         if "2+1" in row["room types"].lower():
-            numberOfAdults = min(row["number of adults"],7)
+            numberOfAdults = min(row["number of adults"],6)
         elif "3" in row["room types"].lower():
-            numberOfAdults = min(row["number of adults"],9)
+            numberOfAdults = min(row["number of adults"],8)
         else:
             numberOfAdults = min(row["number of adults"],4)
         
@@ -105,7 +107,7 @@ def transform_dataframe(df, parkingMap):
             try:
                 if pd.notna(date_value):
                     if isinstance(date_value, str):
-                        parsed_date = pd.to_datetime(date_value, dayfirst=True)
+                        parsed_date = pd.to_datetime(date_value, yearfirst=True)
                     else:
                         parsed_date = date_value
                     datetime_with_time = parsed_date.replace(hour=hour, minute=0, second=0)
@@ -118,16 +120,33 @@ def transform_dataframe(df, parkingMap):
         # Parse check-in (3pm) and check-out (11am) dates
         planned_checkin = parse_date_with_time(row["check in date"], 15, "check-in date")
         planned_checkout = parse_date_with_time(row["check out date"], 11, "check-out date")
+
+        # Define the mapping for channel names
+        channel_mapping = {
+            "Airbnb": "airbnb",
+            "Booking.com": "booking.com",
+            "Agoda": "agoda",
+            "Extranet": "direct",
+            "Mobile App": "direct",
+            "Trip.com(New)": "ctrip_trip"
+        }
+        booking_source = channel_mapping.get(row["channel name"], row["channel name"])
+
+
+        # Use operator contact number if guest phone is empty or invalid
+        guest_phone = row.get("guest phone number", "")
+        is_empty = pd.isna(guest_phone) or str(guest_phone).strip() == ""
+        phone_number = operatorContactNumber if is_empty else str(guest_phone)
         
         # Create transformed row with VMS fields
         transformed_row = {
             "name": f'{row["guest first name"]} {row["guest last name"]}',
-            "phone": str(row["guest phone number"]),
+            "phone": phone_number,
             "email": visitorEmailAddress,
-            "IC/Passport No": "-",  # Required field, but setting it as empty
+            "national_identification_no": "-",  # Required field, but setting it as empty
             "unit_no": str(row["rooms"]),
             "car_park_lot": carParkLot,
-            "booking_source": str(row["channel name"]),
+            "booking_source": booking_source,
             "note": "",  # Optional field, keeping as empty
             "number_of_pax": f'{numberOfAdults}',  # Optional field, keeping as empty
             "planned_checkin_at": planned_checkin,
@@ -266,6 +285,7 @@ def send_request(transformed_df, file_path, original_df, session, csrf_value):
                         for error_row in results.get('error_rows', []):
                             print(f"\nRow {error_row.get('row')}: {error_row.get('name', 'N/A')}")
                             print(f"  Error: {error_row.get('error', 'Unknown error')}")
+                            print(f"  Error: {error_row}")
                     
                     # Determine overall status
                     if successful_imports == len(transformed_df):
@@ -441,6 +461,16 @@ def login_vms_and_get_token(session):
             # print("Found CSRF token after logged in:", csrf_field, csrf_value)
     return csrf_field, csrf_value
 
+def save_opus_vms_excel_to_logs(transformed_df):
+    # Save the result back to the old file or a new one
+    todayDate = datetime.now().strftime("%Y-%m-%d")
+    timestamp = datetime.now().strftime("%H%M%S")
+
+    logsFolder = f"./logs/{todayDate}"
+    os.makedirs(logsFolder, exist_ok=True)
+
+    transformed_df.to_csv(f"{logsFolder}/{todayDate}_opusvms_bulkimport_{timestamp}.csv", index=False)
+
 
 # Main function to read, process, and update Excel file
 def main():
@@ -455,15 +485,8 @@ def main():
         print("Transforming dataframe to VMS format...")
         transformed_df = transform_dataframe(df, parkingMap)
 
-        
-        # Save the result back to the old file or a new one
-        todayDate = datetime.now().strftime("%Y-%m-%d")
-        timestamp = datetime.now().strftime("%H%M%S")
-
-        logsFolder = f"./logs/{todayDate}"
-        os.makedirs(logsFolder, exist_ok=True)
-
-        transformed_df.to_csv(f"{logsFolder}/{todayDate}_opusvms_bulkimport_{timestamp}.csv", index=False)
+        #  Save transformed dataframe to logs for reference
+        save_opus_vms_excel_to_logs(transformed_df)
         
         # Login to VMS and get CSRF token
         csrf_field, csrf_value = login_vms_and_get_token(session=s)
