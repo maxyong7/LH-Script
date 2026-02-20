@@ -63,9 +63,6 @@ def read_excel(file_path):
     df[googleFormStatusColumn] = df[googleFormStatusColumn].astype('object')
     df[googleFormDateColumn] = df[googleFormDateColumn].astype('object')
     
-    # Filter out rows that are already completed
-    df = df[df[googleFormStatusColumn] != completedStatus]
-    
     return df
 
 # Transform dataframe to VMS format with required fields
@@ -81,6 +78,9 @@ def transform_dataframe(df, parkingMap):
         New dataframe with VMS-specific columns
     """
     transformed_rows = []
+
+    # Filter out rows that are already completed
+    df = df[df[googleFormStatusColumn] != completedStatus]
     
     for idx, row in df.iterrows():
         # Get visitor email
@@ -154,14 +154,12 @@ def transform_dataframe(df, parkingMap):
             "deposit_collected": "",  # Optional field, keeping as empty
             "deposit_amount": "",  # Optional field, keeping as empty
             "deposit_currency": "",  # Optional field, keeping as empty
+            "_original_idx": idx,  # Track original dataframe index for status updates
         }
         transformed_rows.append(transformed_row)
     
     # Create new dataframe
     transformed_df = pd.DataFrame(transformed_rows)
-    
-    # Set original index to maintain row.name references
-    transformed_df.index = df.index
     
     return transformed_df
 
@@ -169,6 +167,34 @@ def transform_dataframe(df, parkingMap):
 lock = threading.Lock()
 def update_excel(file_path, df):
     df.to_csv(file_path, index=False)
+
+def update_rows_status(original_df, transformed_df, status, file_path):
+    """
+    Update original_df rows that correspond to transformed_df rows with the given status,
+    persist the changes to disk, and update the global counters.
+    Uses '_original_idx' in transformed_df to locate the correct rows in original_df.
+    """
+    global completed_counter, failed_counter
+
+    with lock:
+        now = datetime.now(pytz.timezone('Asia/Kuala_Lumpur')).strftime("%d/%m/%Y")
+
+        if status == completedStatus:
+            completed_counter = len(transformed_df)
+            print(f"\nUpdating {len(transformed_df)} rows with completed status...")
+        else:
+            failed_counter = len(transformed_df)
+            print(f"\n\u2717 All {len(transformed_df)} guests marked as failed")
+
+        for _, row in transformed_df.iterrows():
+            original_idx = row["_original_idx"]
+            original_df.loc[original_idx, googleFormStatusColumn] = status
+            original_df.loc[original_idx, googleFormDateColumn] = now
+
+        update_excel(file_path, original_df)
+
+    print(f"\nBulk upload completed: {completed_counter} succeeded, {failed_counter} failed")
+    return
 
 # Function to send bulk CSV upload request
 def send_request(transformed_df, file_path, original_df, session, csrf_value):
@@ -187,9 +213,10 @@ def send_request(transformed_df, file_path, original_df, session, csrf_value):
     
     print("\nPreparing bulk CSV upload...")
     
-    # Create CSV in memory from transformed dataframe
+    # Create CSV in memory from transformed dataframe (exclude internal tracking column)
+    vms_df = transformed_df.drop(columns=["_original_idx"])
     csv_buffer = io.StringIO()
-    transformed_df.to_csv(csv_buffer, index=False)
+    vms_df.to_csv(csv_buffer, index=False)
     csv_content = csv_buffer.getvalue()
     csv_bytes = io.BytesIO(csv_content.encode('utf-8'))
     
@@ -318,33 +345,7 @@ def send_request(transformed_df, file_path, original_df, session, csrf_value):
         status = f"Upload failed - {str(e)}"
         print(f"\n✗ Request failed: {e}")
     
-    # Update all rows in original dataframe with status
-    with lock:
-        now = datetime.now(pytz.timezone('Asia/Kuala_Lumpur')).strftime("%d/%m/%Y")
-        
-        if status == completedStatus:
-            completed_counter = len(transformed_df)
-            print(f"\nUpdating {len(transformed_df)} rows with completed status...")
-            
-            # Update original dataframe
-            for idx in transformed_df.index:
-                original_df.loc[idx, googleFormStatusColumn] = status
-                original_df.loc[idx, googleFormDateColumn] = now
-            
-            # Save updated dataframe
-            update_excel(file_path, original_df)
-        else:
-            failed_counter = len(transformed_df)
-            print(f"\n✗ All {len(transformed_df)} guests marked as failed")
-            
-            # Update original dataframe with failed status
-            for idx in transformed_df.index:
-                original_df.loc[idx, googleFormStatusColumn] = status
-                original_df.loc[idx, googleFormDateColumn] = now
-            
-            update_excel(file_path, original_df)
-    
-    print(f"\nBulk upload completed: {completed_counter} succeeded, {failed_counter} failed")
+    return status
 
 def cleanup_old_excel_rows():
     """
@@ -469,7 +470,9 @@ def save_opus_vms_excel_to_logs(transformed_df):
     logsFolder = f"./logs/{todayDate}"
     os.makedirs(logsFolder, exist_ok=True)
 
-    transformed_df.to_csv(f"{logsFolder}/{todayDate}_opusvms_bulkimport_{timestamp}.csv", index=False)
+    # Exclude internal tracking column before saving to logs
+    log_df = transformed_df.drop(columns=["_original_idx"], errors="ignore")
+    log_df.to_csv(f"{logsFolder}/{todayDate}_opusvms_bulkimport_{timestamp}.csv", index=False)
 
 
 # Main function to read, process, and update Excel file
@@ -495,13 +498,14 @@ def main():
             return
         
         # Perform bulk CSV upload (single request for all guests)
-        send_request(
+        status = send_request(
             transformed_df=transformed_df,
             file_path=excel_file_path,
             original_df=df,
             session=s,
             csrf_value=csrf_value,
         )
+        update_rows_status(df, transformed_df, status, excel_file_path)
         
         print(f'\nCompleted: {completed_counter} \nFailed: {failed_counter}')
         
