@@ -29,7 +29,8 @@ channel_mapping = {
     "Agoda": "Ag",
     "Extranet": "Dr",
     "Mobile App": "Dr",
-    "Trip.com(New)": "Tp"
+    "Trip.com(New)": "Tp",
+    "Trip.com (New)": "Tp"
 }
 
 # Clean and filter necessary columns from reservations data
