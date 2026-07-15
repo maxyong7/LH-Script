@@ -41,3 +41,5 @@ venv
 *.env*
 /logs/*
 *.json
+
+*.csv
