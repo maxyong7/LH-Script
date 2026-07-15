@@ -38,6 +38,10 @@
     ```
     python .\BulkImportContacts.py
     ```
+    To bulk submit Opus VMS
+    ```
+    python .\BulkImportVisitorOpusVMS.py
+    ```
     To submit Opus VMS form
     ```
     python .\BulkFillOpusVMS.py
