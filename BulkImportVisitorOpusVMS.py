@@ -8,6 +8,7 @@ from html.parser import HTMLParser
 import dotenv
 import json
 import io
+import zipfile
 dotenv.load_dotenv()
 
 excel_file_path = os.getenv("MAIN_EXCEL_FILE_PATH")
@@ -196,6 +197,37 @@ def update_rows_status(original_df, transformed_df, status, file_path):
     print(f"\nBulk upload completed: {completed_counter} succeeded, {failed_counter} failed")
     return
 
+def normalize_xlsx_relationship_targets(xlsx_bytes):
+    """
+    Pandas/openpyxl can emit workbook relationship targets like
+    '/xl/worksheets/sheet1.xml'. Some server-side XLSX readers resolve that
+    as an absolute filesystem path, which fails under open_basedir.
+    Rewrite those targets to package-relative paths before upload.
+    """
+    source_buffer = io.BytesIO(xlsx_bytes.getvalue())
+    fixed_buffer = io.BytesIO()
+
+    with zipfile.ZipFile(source_buffer, "r") as source_zip:
+        with zipfile.ZipFile(fixed_buffer, "w") as fixed_zip:
+            for zip_info in source_zip.infolist():
+                file_bytes = source_zip.read(zip_info.filename)
+
+                if zip_info.filename == "xl/_rels/workbook.xml.rels":
+                    file_bytes = file_bytes.replace(b'Target="/xl/', b'Target="')
+
+                cloned_info = zipfile.ZipInfo(zip_info.filename)
+                cloned_info.date_time = zip_info.date_time
+                cloned_info.compress_type = zip_info.compress_type
+                cloned_info.comment = zip_info.comment
+                cloned_info.extra = zip_info.extra
+                cloned_info.create_system = zip_info.create_system
+                cloned_info.external_attr = zip_info.external_attr
+                cloned_info.internal_attr = zip_info.internal_attr
+                fixed_zip.writestr(cloned_info, file_bytes)
+
+    fixed_buffer.seek(0)
+    return fixed_buffer
+
 # Function to send bulk CSV upload request
 def send_request(transformed_df, file_path, original_df, session, csrf_value):
     """
@@ -213,21 +245,25 @@ def send_request(transformed_df, file_path, original_df, session, csrf_value):
     
     print("\nPreparing bulk CSV upload...")
     
-    # Create CSV in memory from transformed dataframe (exclude internal tracking column)
+    # Create XLSX in memory from transformed dataframe (exclude internal tracking column)
     vms_df = transformed_df.drop(columns=["_original_idx"])
-    csv_buffer = io.StringIO()
-    vms_df.to_csv(csv_buffer, index=False)
-    csv_content = csv_buffer.getvalue()
-    csv_bytes = io.BytesIO(csv_content.encode('utf-8'))
-    
+    xlsx_bytes = io.BytesIO()
+    vms_df.to_excel(xlsx_bytes, index=False)
+    xlsx_bytes = normalize_xlsx_relationship_targets(xlsx_bytes)
+    xlsx_bytes.seek(0)
+
     # Generate filename with timestamp
     todayDate = datetime.now().strftime("%Y-%m-%d")
     timestamp = datetime.now().strftime("%H%M%S")
-    filename = f"{todayDate}_merged_file_{timestamp}.csv"
-    
+    filename = f"{todayDate}_opusvms_bulkimport_{timestamp}.xlsx"
+
+    export_path = save_opus_vms_excel_to_logs(xlsx_bytes, todayDate,filename)
+    xlsx_bytes.seek(0)
+    print(f"\nXLSX exported to: {export_path}")
+
     # Prepare multipart/form-data payload
     files = {
-        'file': (filename, csv_bytes, 'application/vnd.ms-excel')
+        'file': (filename, xlsx_bytes, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     }
     
     data = {
@@ -462,17 +498,16 @@ def login_vms_and_get_token(session):
             # print("Found CSRF token after logged in:", csrf_field, csrf_value)
     return csrf_field, csrf_value
 
-def save_opus_vms_excel_to_logs(transformed_df):
-    # Save the result back to the old file or a new one
-    todayDate = datetime.now().strftime("%Y-%m-%d")
-    timestamp = datetime.now().strftime("%H%M%S")
+def save_opus_vms_excel_to_logs(xlsx_bytes, todayDate, filename):
 
     logsFolder = f"./logs/{todayDate}"
     os.makedirs(logsFolder, exist_ok=True)
+    export_path = os.path.join(logsFolder, filename)
 
-    # Exclude internal tracking column before saving to logs
-    log_df = transformed_df.drop(columns=["_original_idx"], errors="ignore")
-    log_df.to_csv(f"{logsFolder}/{todayDate}_opusvms_bulkimport_{timestamp}.csv", index=False)
+    with open(export_path, "wb") as f:
+        f.write(xlsx_bytes.getvalue())
+
+    return export_path
 
 
 # Main function to read, process, and update Excel file
@@ -487,9 +522,6 @@ def main():
         # Transform dataframe to VMS format
         print("Transforming dataframe to VMS format...")
         transformed_df = transform_dataframe(df, parkingMap)
-
-        #  Save transformed dataframe to logs for reference
-        save_opus_vms_excel_to_logs(transformed_df)
         
         # Login to VMS and get CSRF token
         csrf_field, csrf_value = login_vms_and_get_token(session=s)
